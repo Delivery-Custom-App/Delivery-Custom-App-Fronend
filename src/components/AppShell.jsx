@@ -10,9 +10,10 @@ import {
   LayoutDashboard, Store, ChevronDown, ChevronLeft, ChevronRight,
   DollarSign, FileText, BarChart3, Wallet, Bell, Gift, PlusCircle,
   Table2, ChefHat,
-  Package, Truck, ShoppingCart, BookMarked, PackageOpen,
-  LogOut, Utensils, HelpCircle, Phone, Mail, Users, RotateCcw, MapPin, Building2, Settings,
+  Package, Truck, ShoppingCart, BookMarked, PackageOpen, UtensilsCrossed,
+  LogOut, HelpCircle, Phone, Mail, Users, RotateCcw, MapPin, Building2, Settings,
 } from 'lucide-react'
+import AunaroSymbol from '@/assets/brand/AunaroSymbol'
 import { ExpandableTabs } from './ui/expandable-tabs'
 import CoachMark from './onboarding/CoachMark'
 import { useOnboarding } from '../context/OnboardingContext'
@@ -20,15 +21,18 @@ import { isSuperAdminRole, isAdminNegocioRole } from '../auth/roleLabel'
 import { WORKER_ROLES } from '../constants/roles'
 import { isDirectSaleDemoUser } from '../constants/demoMode'
 import { formatShortAddress } from '../lib/formatAddress'
+import { isV2FeatureEnabled } from '../lib/v2Features'
+import { isAlPasoLocal } from '../lib/salesModel'
 
 /* ── key sets for accordion auto-open ──────────────────────────── */
 const ADMIN_KEYS = new Set(['administracion', 'ventas', 'rendiciones', 'reportes', 'flujo-caja', 'alertas', 'bonos'])
 const POS_KEYS   = new Set(['pos', 'pos-mesas', 'pos-kitchen', 'pos-venta-directa', 'pos-registrar-producto'])
-const INV_KEYS   = new Set(['inv-hub', 'inv-prov', 'inv-stock', 'inv-compras', 'inv-recetas'])
+const INV_KEYS   = new Set(['inv-hub', 'inv-prov', 'inv-stock', 'inv-stock-ctrl', 'inv-compras', 'inv-recetas'])
 
 /* ── active-key derived from pathname ──────────────────────────── */
 function deriveActiveKey(pathname) {
   if (pathname.includes('/inventario/proveedores'))       return 'inv-prov'
+  if (pathname.includes('/inventario/stock-control'))     return 'inv-stock-ctrl'
   if (pathname.includes('/inventario/stock'))             return 'inv-stock'
   if (pathname.includes('/inventario/compras-semanales')) return 'inv-compras'
   if (pathname.includes('/inventario/recipes'))           return 'inv-recetas'
@@ -44,6 +48,7 @@ function deriveActiveKey(pathname) {
   if (pathname.includes('/administrativo/alertas'))       return 'alertas'
   if (pathname.includes('/administrativo/bonos'))         return 'bonos'
   if (pathname.includes('/administrativo'))               return 'administracion'
+  if (pathname.includes('/rrhh'))                         return 'hr-hub'
   if (pathname.includes('/usuarios'))                    return 'usuarios'
   if (pathname.includes('/gestor/resumen'))              return 'gestor-resumen'
   if (pathname.includes('/gestor/negocios'))             return 'gestor'
@@ -72,7 +77,7 @@ const ACCORDIONS = [
   },
   {
     key: 'pos',
-    label: 'POS',
+    label: 'POS Restaurante',
     icon: Table2,
     items: [
       { key: 'pos-mesas',   label: 'Gestión de Mesas', icon: Table2  },
@@ -84,11 +89,12 @@ const ACCORDIONS = [
     label: 'Inventario',
     icon: PackageOpen,
     items: [
-      { key: 'inv-hub',     label: 'Estado Inventario', icon: PackageOpen  },
-      { key: 'inv-prov',    label: 'Proveedores',              icon: Truck        },
-      { key: 'inv-stock',   label: 'Carta virtual',            icon: Package      },
-      { key: 'inv-compras', label: 'Pedidos',                  icon: ShoppingCart },
-      { key: 'inv-recetas', label: 'Recetas',                  icon: BookMarked   },
+      { key: 'inv-hub',        label: 'Estado Inventario', icon: PackageOpen  },
+      { key: 'inv-prov',       label: 'Proveedores',       icon: Truck        },
+      { key: 'inv-stock',      label: 'Menú',              icon: UtensilsCrossed },
+      { key: 'inv-stock-ctrl', label: 'Control de stock',  icon: Package      },
+      { key: 'inv-compras',    label: 'Pedidos',           icon: ShoppingCart },
+      { key: 'inv-recetas',    label: 'Recetas',           icon: BookMarked   },
     ],
   },
 ]
@@ -97,16 +103,22 @@ const ACCORDIONS = [
 function Sidebar({ collapsed, onToggle, onClose }) {
   const { user, userRole, logout } = useAuth()
   const { restart: restartTour } = useOnboarding()
-  const { palette, setPalette, darkMode, setDarkMode } = useTheme()
+  const { darkMode, setDarkMode } = useTheme()
   const isSuperAdmin = isSuperAdminRole(userRole)
   const isOwner = isAdminNegocioRole(userRole)
   const isWorker = WORKER_ROLES.includes(userRole)
   const isDemoUser = isDirectSaleDemoUser(user?.email)
+  const { locales } = useLocals()
   const navigate = useNavigate()
   const { pathname, state: locState } = useLocation()
 
   const localIdMatch = pathname.match(/\/local\/([^/]+)/)
   const localId  = localIdMatch ? localIdMatch[1] : null
+  const currentLocal = useMemo(
+    () => locales.find((l) => String(l.id) === String(localId)) || locState?.local || null,
+    [locales, localId, locState],
+  )
+  const isAlPaso = isAlPasoLocal(currentLocal) || isDemoUser
   const activeKey = deriveActiveKey(pathname)
   const navState  = locState?.local ? { local: locState.local } : localId ? { local: { id: localId } } : {}
 
@@ -114,22 +126,6 @@ function Sidebar({ collapsed, onToggle, onClose }) {
   const [userClosed, setUserClosed] = useState({ administracion: false, pos: false, inventario: false })
   const [helpOpen, setHelpOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-
-  const PALETTES = [
-    { key: 'rutek',  label: 'Default', hint: 'Azul · crema',  swatches: ['#2563EB', '#F7F4F0'] },
-    { key: 'legacy', label: 'Legacy',  hint: 'Verde actual',  swatches: ['#10b981', '#0a1410'] },
-  ]
-
-  // La paleta cambia SOLO colores; el modo claro/oscuro es un control aparte.
-  // Escribe directo al DOM + localStorage además de React, para que el swap
-  // CSS ocurra sí o sí en el clic (a prueba de contextos obsoletos/HMR).
-  const applyPalette = (key) => {
-    setPalette(key)
-    try {
-      document.documentElement.setAttribute('data-palette', key)
-      window.localStorage.setItem('palette', key)
-    } catch {}
-  }
 
   const applyMode = (dark) => {
     setDarkMode(dark)
@@ -140,14 +136,8 @@ function Sidebar({ collapsed, onToggle, onClose }) {
   }
 
   const resetAppearance = () => {
-    applyPalette('rutek')
     applyMode(false)
   }
-
-  const livePrimary = typeof window !== 'undefined'
-    ? (window.getComputedStyle?.(document.documentElement).getPropertyValue('--primary').trim() || '—')
-    : '—'
-  const liveAttr = typeof window !== 'undefined' ? document.documentElement.getAttribute('data-palette') : null
 
   const isOpen = (key) => {
     if (userClosed[key]) return false
@@ -172,7 +162,7 @@ function Sidebar({ collapsed, onToggle, onClose }) {
     if (!localId) return
     switch (key) {
       case 'administracion': navigate(`/local/${localId}/administrativo/ventas`, { state: navState }); break
-      case 'pos':            navigate(isDemoUser ? `/local/${localId}/pos/venta-directa` : `/local/${localId}/pos`, { state: navState }); break
+      case 'pos':            navigate(isAlPaso ? `/local/${localId}/pos/venta-directa` : `/local/${localId}/pos`, { state: navState }); break
       case 'inventario':     navigate(`/local/${localId}/inventario`, { state: navState }); break
       default: break
     }
@@ -189,6 +179,7 @@ function Sidebar({ collapsed, onToggle, onClose }) {
       case 'gestor-usuarios':      navigate('/gestor/usuarios'); break
       case 'gestor-observabilidad': navigate('/gestor/observabilidad'); break
       case 'dashboard': navigate(localId ? `/local/${localId}/dashboard` : '/admin', { state: navState }); break
+      case 'hr-hub':    if (localId) navigate(`/local/${localId}/rrhh`, { state: navState }); break
       case 'pos-mesas':     if (localId) navigate(`/local/${localId}/pos`, { state: navState }); break
       case 'pos-kitchen':   if (localId) navigate(`/local/${localId}/pos/cocina`, { state: navState }); break
       case 'pos-venta-directa': if (localId) navigate(`/local/${localId}/pos/venta-directa`, { state: navState }); break
@@ -196,6 +187,7 @@ function Sidebar({ collapsed, onToggle, onClose }) {
       case 'inv-hub':       if (localId) navigate(`/local/${localId}/inventario`, { state: navState }); break
       case 'inv-prov':      if (localId) navigate(`/local/${localId}/inventario/proveedores`, { state: navState }); break
       case 'inv-stock':     if (localId) navigate(`/local/${localId}/inventario/stock`, { state: navState }); break
+      case 'inv-stock-ctrl': if (localId) navigate(`/local/${localId}/inventario/stock-control`, { state: navState }); break
       case 'inv-compras':   if (localId) navigate(`/local/${localId}/inventario/compras-semanales`, { state: navState }); break
       case 'inv-recetas':   if (localId) navigate(`/local/${localId}/inventario/recipes`, { state: navState }); break
       default:
@@ -212,35 +204,36 @@ function Sidebar({ collapsed, onToggle, onClose }) {
     ...(isSuperAdmin ? [{ key: 'gestor-auditoria', label: 'Auditoría', icon: FileText }] : []),
     ...(isSuperAdmin ? [{ key: 'gestor-observabilidad', label: 'Observabilidad', icon: BarChart3 }] : []),
     ...(isOwner ? [{ key: 'usuarios', label: 'Usuarios', icon: Users }] : []),
+    ...(isV2FeatureEnabled('hrModule') && localId ? [{ key: 'hr-hub', label: 'RRHH', icon: Users }] : []),
     ...(!isWorker && localId ? [{ key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }] : []),
   ]
 
-  // Recorte temporal de demo (local "Rustik", venta al paso), scoped por
-  // email — no afecta a otros usuarios reales.
-  const DEMO_QUICK_ITEMS = [
+  // Comida al paso (sales_model AL_PASO) o demo legacy por email:
+  // caja + menú, sin mesas/cocina.
+  const AL_PASO_POS_ITEMS = [
     { key: 'pos-venta-directa', label: 'Venta directa', icon: DollarSign },
     { key: 'pos-registrar-producto', label: 'Registrar productos', icon: PlusCircle },
   ]
   const WORKER_FINANCE_ITEM_KEYS = new Set(['ventas', 'rendiciones'])
   const visibleAccordions = isWorker
-    ? (isDemoUser
+    ? (isAlPaso
         ? ACCORDIONS
             .filter((s) => s.key === 'pos' || s.key === 'administracion')
             .map((s) => s.key === 'pos'
-              ? { ...s, label: 'Punto de venta', items: DEMO_QUICK_ITEMS }
+              ? { ...s, label: 'Punto de venta', items: AL_PASO_POS_ITEMS }
               : { ...s, label: 'Finanzas', items: s.items.filter((i) => WORKER_FINANCE_ITEM_KEYS.has(i.key)) })
         : ACCORDIONS.filter((s) => s.key === 'pos'))
-    : isDemoUser
-      // Cuenta admin de demo: solo POS (accesos rápidos, sin mesas/cocina —
-      // "Configurar POS"/"Impresora" ya viven dentro de Venta directa) y
-      // Finanzas — sin Inventario.
-      ? ACCORDIONS
-          .filter((s) => s.key !== 'inventario')
-          .map((s) => {
-            if (s.key === 'pos') return { ...s, items: DEMO_QUICK_ITEMS }
-            if (s.key === 'administracion') return { ...s, label: 'Finanzas', items: s.items.filter((i) => WORKER_FINANCE_ITEM_KEYS.has(i.key)) }
-            return s
-          })
+    : isAlPaso
+      ? ACCORDIONS.map((s) => {
+          if (s.key === 'pos') return { ...s, label: 'Punto de venta', items: AL_PASO_POS_ITEMS }
+          if (s.key === 'inventario') {
+            return {
+              ...s,
+              items: s.items.filter((i) => i.key === 'inv-stock' || i.key === 'inv-hub' || i.key === 'inv-stock-ctrl'),
+            }
+          }
+          return s
+        })
       : ACCORDIONS
 
   const navBtn = (item, small = false) => {
@@ -288,11 +281,13 @@ function Sidebar({ collapsed, onToggle, onClose }) {
       className="shrink-0 flex flex-col bg-[hsl(var(--card))] border-r border-[hsl(var(--border))] h-screen sticky top-0 overflow-hidden z-20"
     >
       {/* Header */}
-      <div className={cn('border-b border-[hsl(var(--border))] flex items-center', collapsed ? 'justify-center px-2 min-h-[56px]' : 'justify-between px-3 min-h-[56px]')}>
-        {!collapsed && (
+      <div className={cn('border-b border-[hsl(var(--border))] flex items-center', collapsed ? 'flex-col justify-center gap-1.5 px-2 py-2.5' : 'justify-between px-3 min-h-[56px]')}>
+        {collapsed ? (
+          <AunaroSymbol size={20} className="shrink-0" />
+        ) : (
           <div className="flex items-center gap-2 px-1">
-            <Utensils size={16} className="shrink-0 text-[hsl(var(--primary))]" />
-            <span className="font-extrabold text-sm tracking-tight text-[hsl(var(--foreground))]">Gestflow</span>
+            <AunaroSymbol size={20} className="shrink-0" />
+            <span className="font-marca text-sm tracking-[0.1em] text-[hsl(var(--foreground))]">AUNARO</span>
           </div>
         )}
         <button
@@ -323,7 +318,7 @@ function Sidebar({ collapsed, onToggle, onClose }) {
           </div>
         )}
 
-        {/* Accordions */}
+        {/* Accordions: menú + submenú expansible */}
         {localId && visibleAccordions.map((section) => {
           const open = isOpen(section.key)
           const hasActive = activeKey === section.key || section.items.some((i) => activeKey === i.key)
@@ -435,33 +430,6 @@ function Sidebar({ collapsed, onToggle, onClose }) {
             >
               <div className="rounded-lg bg-[hsl(var(--muted))] px-3 py-3 space-y-2">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">Apariencia</span>
-                <div className="grid grid-cols-2 gap-2">
-                  {PALETTES.map((p) => {
-                    const selected = palette === p.key
-                    return (
-                      <button
-                        key={p.key}
-                        type="button"
-                        onClick={() => applyPalette(p.key)}
-                        aria-pressed={selected}
-                        className={cn(
-                          'flex flex-col items-start gap-1.5 rounded-lg border p-2 text-left transition-colors cursor-pointer',
-                          selected
-                            ? 'border-[hsl(var(--primary))] bg-[hsl(var(--card))]'
-                            : 'border-[hsl(var(--border))] bg-[hsl(var(--card))] hover:border-[hsl(var(--primary)/0.5)]',
-                        )}
-                      >
-                        <span className="flex items-center gap-1">
-                          {p.swatches.map((c) => (
-                            <span key={c} className="h-3.5 w-3.5 rounded-full border border-black/10" style={{ backgroundColor: c }} />
-                          ))}
-                        </span>
-                        <span className="text-xs font-semibold text-[hsl(var(--foreground))]">{p.label}</span>
-                        <span className="text-[10px] text-[hsl(var(--muted-foreground))]">{p.hint}</span>
-                      </button>
-                    )
-                  })}
-                </div>
 
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">Modo</span>
@@ -500,12 +468,8 @@ function Sidebar({ collapsed, onToggle, onClose }) {
                   onClick={resetAppearance}
                   className="w-full text-left text-[10px] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
                 >
-                  Restablecer apariencia (Default, claro)
+                  Restablecer apariencia (claro)
                 </button>
-
-                <p className="text-[9px] text-[hsl(var(--muted-foreground))] opacity-70">
-                  debug: attr={liveAttr ?? '—'} · primary={livePrimary}
-                </p>
               </div>
             </motion.div>
           )}
@@ -577,7 +541,7 @@ function Sidebar({ collapsed, onToggle, onClose }) {
           onClick={logout}
           title={collapsed ? 'Cerrar sesión' : undefined}
           className={cn(
-            'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[hsl(var(--muted-foreground))] hover:bg-red-100 dark:hover:bg-red-900/20 hover:text-red-600 transition-colors',
+            'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--destructive)/0.1)] hover:text-[hsl(var(--destructive))] transition-colors',
             collapsed && 'justify-center px-0',
           )}
         >
@@ -644,7 +608,7 @@ function TopBar({ localId }) {
             )}
           </>
         ) : (
-          <span className="text-sm font-semibold text-[hsl(var(--foreground))]">Gestflow</span>
+          <span className="font-marca text-sm tracking-[0.1em] text-[hsl(var(--foreground))]">AUNARO</span>
         )}
       </div>
 
@@ -686,7 +650,7 @@ function AppShell() {
   }
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-[#1a1a1a] via-[#121110] to-[#0c0b0a]">
+    <div className="flex h-screen bg-gradient-to-br from-[var(--loading-from)] via-[var(--loading-via)] to-[var(--loading-to)]">
 
       {/* Overlay backdrop (solo móvil) */}
       <AnimatePresence>
