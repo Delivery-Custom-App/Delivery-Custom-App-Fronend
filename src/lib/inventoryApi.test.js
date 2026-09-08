@@ -13,18 +13,18 @@ describe('buildInventoryStockListPath (HU-47/HU-48 filtros)', () => {
   const cat = '22222222-2222-2222-2222-222222222222'
 
   it('sin filtros: solo path base', () => {
-    expect(buildInventoryStockListPath(local)).toBe(`/inventory/locals/${local}/stock`)
+    expect(buildInventoryStockListPath(local)).toBe(`/inventory?local_id=${encodeURIComponent(local)}`)
   })
 
   it('incluye category', () => {
     expect(buildInventoryStockListPath(local, { category: cat })).toBe(
-      `/inventory/locals/${local}/stock?category=${encodeURIComponent(cat)}`,
+      `/inventory?local_id=${encodeURIComponent(local)}&category=${encodeURIComponent(cat)}`,
     )
   })
 
   it('incluye search recortado', () => {
     expect(buildInventoryStockListPath(local, { search: '  arroz  ' })).toBe(
-      `/inventory/locals/${local}/stock?search=${encodeURIComponent('arroz')}`,
+      `/inventory?local_id=${encodeURIComponent(local)}&search=${encodeURIComponent('arroz')}`,
     )
   })
 
@@ -32,11 +32,11 @@ describe('buildInventoryStockListPath (HU-47/HU-48 filtros)', () => {
     const path = buildInventoryStockListPath(local, { category: cat, search: 'leche' })
     expect(path).toContain(`category=${encodeURIComponent(cat)}`)
     expect(path).toContain(`search=${encodeURIComponent('leche')}`)
-    expect(path.startsWith(`/inventory/locals/${local}/stock?`)).toBe(true)
+    expect(path.startsWith(`/inventory?local_id=${encodeURIComponent(local)}&`)).toBe(true)
   })
 
   it('omite search vacío', () => {
-    expect(buildInventoryStockListPath(local, { search: '   ' })).toBe(`/inventory/locals/${local}/stock`)
+    expect(buildInventoryStockListPath(local, { search: '   ' })).toBe(`/inventory?local_id=${encodeURIComponent(local)}`)
   })
 
   it('repite status en la query cuando hay varios', () => {
@@ -68,7 +68,7 @@ describe('buildInventoryProductsPath (listado paginado /products)', () => {
 
   it('incluye limit y offset por defecto', () => {
     const path = buildInventoryProductsPath(local, {})
-    expect(path).toContain(`/inventory/locals/${local}/products?`)
+    expect(path).toContain(`/inventory?local_id=${encodeURIComponent(local)}&`)
     expect(path).toContain('limit=50')
     expect(path).toContain('offset=0')
   })

@@ -8,6 +8,8 @@ import * as providersApi from '../../lib/providersApi'
 
 vi.mock('../../lib/apiClient', () => ({
   getAuthContext: vi.fn(() => Promise.resolve({ token: 'test-token', businessId: 'biz-1' })),
+  getOptionalAuthContext: vi.fn(() => Promise.resolve({ token: 'test-token', businessId: 'biz-1' })),
+  apiRequest: vi.fn(() => Promise.resolve([])),
 }))
 
 const mockKpis = {
@@ -115,7 +117,7 @@ describe('SuppliersKpisDashboard', () => {
 
     await user.click(screen.getByRole('button', { name: /Registrar proveedor/i }))
 
-    expect(await screen.findByRole('heading', { name: /Registrar proveedor/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Registro de Proveedores/i })).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: /Nombre comercial/i })).toBeInTheDocument()
   })
 
@@ -124,17 +126,18 @@ describe('SuppliersKpisDashboard', () => {
     renderSuppliers('Admin')
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Ver detalle/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Gestionar proveedor/i })).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: /Ver detalle/i }))
+    await user.click(screen.getByRole('button', { name: /Gestionar proveedor/i }))
 
     await waitFor(() => {
       expect(providersApi.getSupplierDetailForBusiness).toHaveBeenCalledWith('s-1', 'biz-1')
     })
 
-    expect(await screen.findByRole('heading', { name: /Detalle del proveedor/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /^Proveedor Demo$/ })).toBeInTheDocument()
+    // El modal muestra el nombre del proveedor directamente como heading
+    // (no un rótulo genérico "Detalle del proveedor").
+    expect(await screen.findByRole('heading', { name: /^Proveedor Demo$/ })).toBeInTheDocument()
     expect(screen.getByText('Item A')).toBeInTheDocument()
   })
 })

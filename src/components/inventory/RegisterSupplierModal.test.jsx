@@ -15,7 +15,9 @@ vi.mock('../../lib/providersApi', () => ({
 
 const validForm = {
   name: 'Distribuidora Test',
-  rut: '12.345.678-5',
+  // Body >= 50.000.000 para pasar validateRutTypeConsistency como "comercial"
+  // (default del formulario) — dígito verificador real (módulo 11).
+  rut: '76.543.210-3',
   address: 'Av. Siempre Viva 742',
   category: 'Insumos',
   contact_name: 'Ana',
@@ -25,12 +27,13 @@ const validForm = {
 
 function fillValidForm(user) {
   return user.type(screen.getByLabelText(/Nombre comercial/i), validForm.name)
-    .then(() => user.type(screen.getByLabelText(/^RUT/i), validForm.rut))
+    .then(() => user.type(screen.getByRole('textbox', { name: /RUT Comercial/i }), validForm.rut))
     .then(() => user.type(screen.getByLabelText(/Dirección/i), validForm.address))
-    .then(() => user.type(screen.getByLabelText(/Categoría/i), validForm.category))
+    .then(() => user.type(screen.getByPlaceholderText(/Escribe la categoría/i), validForm.category))
+    .then(() => user.keyboard('{Enter}'))
     .then(() => user.type(screen.getByLabelText(/^Contacto/i), validForm.contact_name))
     .then(() => user.type(screen.getByLabelText(/^Teléfono/i), validForm.phone))
-    .then(() => user.type(screen.getByLabelText(/^Email/i), validForm.email))
+    .then(() => user.type(screen.getByLabelText(/Correo electrónico/i), validForm.email))
 }
 
 describe('RegisterSupplierModal', () => {
@@ -39,15 +42,17 @@ describe('RegisterSupplierModal', () => {
   })
 
   it('no renderiza cuando open es false', () => {
-    const { container } = render(
-      <RegisterSupplierModal open={false} onClose={vi.fn()} businessId="biz-1" />,
-    )
-    expect(container.firstChild).toBeNull()
+    // El drawer queda montado (se anima con clases CSS), no desmontado —
+    // "cerrado" se verifica por las clases que lo sacan de la vista.
+    render(<RegisterSupplierModal open={false} onClose={vi.fn()} businessId="biz-1" />)
+    const heading = screen.getByRole('heading', { name: /Registro de Proveedores/i })
+    const panel = heading.closest('div[style*="z-index: 501"]')
+    expect(panel.className).toContain('translate-x-full')
   })
 
   it('muestra el formulario cuando open es true', () => {
     render(<RegisterSupplierModal open onClose={vi.fn()} businessId="biz-1" />)
-    expect(screen.getByRole('heading', { name: /Registrar proveedor/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Registro de Proveedores/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Registrar$/i })).toBeInTheDocument()
   })
 
@@ -75,7 +80,7 @@ describe('RegisterSupplierModal', () => {
     const [body] = postSupplier.mock.calls[0]
     expect(body.business_id).toBe('biz-99')
     expect(body.name).toBe(validForm.name)
-    expect(body.rut).toBe('123456785')
+    expect(body.rut).toBe('765432103')
     expect(onSuccess).toHaveBeenCalled()
     expect(onClose).toHaveBeenCalled()
   })
