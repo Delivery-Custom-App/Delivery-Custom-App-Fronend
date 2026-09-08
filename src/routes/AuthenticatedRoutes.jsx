@@ -23,7 +23,6 @@ const HrModule = lazy(() => import('../components/hr/HrModule'))
 const MesaDetail = lazy(() => import('../components/pos/MesaDetail'))
 const ReportesPage = lazy(() => import('../components/pos/ReportesPage'))
 const VentaDirectaView = lazy(() => import('../components/pos/VentaDirectaView'))
-const RegistrarProductoView = lazy(() => import('../components/pos/RegistrarProductoView'))
 const UserManagementPage = lazy(() => import('../components/UserManagementPage'))
 const UsersListPage = lazy(() => import('../components/UsersListPage'))
 const TenantManagerPage = lazy(() => import('../components/TenantManagerPage'))
@@ -32,6 +31,7 @@ const TenantDetailPage = lazy(() => import('../components/TenantDetailPage'))
 const GlobalAuditPage = lazy(() => import('../components/GlobalAuditPage'))
 const AdminUsersPage = lazy(() => import('../components/AdminUsersPage'))
 const ObservabilityPage = lazy(() => import('../components/ObservabilityPage'))
+const ConfiguracionPage = lazy(() => import('../components/ConfiguracionPage'))
 import { OnboardingProvider } from '../context/OnboardingContext'
 import { WORKER_ROLES } from '../constants/roles'
 import { isSuperAdminRole, isAdminNegocioRole } from '../auth/roleLabel'
@@ -100,7 +100,6 @@ function LocalRoutes() {
       <Route path="/local/:localId/pos/reportes" element={<ReportesPage />} />
       <Route path="/local/:localId/pos/mesa/:mesaId" element={<MesaDetail />} />
       <Route path="/local/:localId/pos/venta-directa" element={<VentaDirectaView />} />
-      <Route path="/local/:localId/pos/registrar-producto" element={<RegistrarProductoView />} />
       <Route path="/local/:localId/dashboard" element={<LocalDashboard />} />
       <Route path="/local/:localId" element={<LocalModulesHomeRedirect />} />
     </>
@@ -119,6 +118,7 @@ function SuperadminRoutes() {
         <Route path="/gestor/auditoria" element={<GlobalAuditPage />} />
         <Route path="/gestor/usuarios" element={<AdminUsersPage />} />
         <Route path="/gestor/observabilidad" element={<ObservabilityPage />} />
+        <Route path="/configuracion" element={<ConfiguracionPage />} />
         <Route path="*" element={<Navigate to="/gestor" replace />} />
       </Route>
     </Routes>
@@ -134,6 +134,7 @@ function OwnerRoutes() {
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/usuarios" element={<UsersListPage />} />
         <Route path="/usuarios/crear" element={<UserManagementPage />} />
+        <Route path="/configuracion" element={<ConfiguracionPage />} />
         {LocalRoutes()}
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Route>
@@ -157,6 +158,7 @@ function AdminRoutes({ assignedLocalId }) {
         {/* Bloquea /usuarios */}
         <Route path="/usuarios" element={<Navigate to={home} replace />} />
         <Route path="/usuarios/crear" element={<Navigate to={home} replace />} />
+        <Route path="/configuracion" element={<ConfiguracionPage />} />
         {LocalRoutes()}
         <Route path="*" element={<Navigate to={home} replace />} />
       </Route>
@@ -183,9 +185,9 @@ function WorkerRoutes({ assignedLocalId }) {
           <Route path="/local/:localId/pos/cocina" element={<POSModule />} />
           <Route path="/local/:localId/pos/mesa/:mesaId" element={<MesaDetail />} />
           <Route path="/local/:localId/pos/venta-directa" element={<VentaDirectaView />} />
-          <Route path="/local/:localId/pos/registrar-producto" element={<RegistrarProductoView />} />
           <Route path="/local/:localId/administrativo/:sectionId?" element={<AdministrativeModule />} />
           <Route path="/local/:localId/rrhh" element={<HrModule />} />
+          <Route path="/configuracion" element={<ConfiguracionPage />} />
           <Route path="*" element={<WorkerPosHomeRedirect assignedLocalId={assignedLocalId} />} />
         </Route>
       </Routes>
@@ -204,6 +206,7 @@ function WorkerRoutes({ assignedLocalId }) {
         <Route path="/local/:localId/pos/venta-directa" element={<VentaDirectaView />} />
         <Route path="/local/:localId/administrativo/:sectionId?" element={<AdministrativeModule />} />
         <Route path="/local/:localId/rrhh" element={<HrModule />} />
+        <Route path="/configuracion" element={<ConfiguracionPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

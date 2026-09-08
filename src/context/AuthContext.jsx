@@ -34,6 +34,15 @@ export function AppAuthProvider({ children }) {
     clearAuthState()
   }, [clearAuthState])
 
+  /** Vuelve a pedir /auth/me y actualiza `user` en contexto (ej. tras cambiar avatar). */
+  const refreshUser = useCallback(async () => {
+    const session = getStoredSession()
+    if (!session?.access_token) return null
+    const sessionUser = await fetchCurrentUser(session.access_token)
+    if (sessionUser) setUser(sessionUser)
+    return sessionUser
+  }, [])
+
   useEffect(() => {
     const checkSession = async () => {
       const session = getStoredSession()
@@ -160,6 +169,7 @@ export function AppAuthProvider({ children }) {
       userRole: role,
       assignedLocalId: getAssignedLocalId(user),
       logout,
+      refreshUser,
       isWorker: role != null && WORKER_ROLES.includes(role),
       isInventoryAdmin: isInventoryAdminRole(role),
       appLoading,
@@ -178,6 +188,7 @@ export function AppAuthProvider({ children }) {
     user,
     userRole,
     logout,
+    refreshUser,
     appLoading,
     email,
     password,

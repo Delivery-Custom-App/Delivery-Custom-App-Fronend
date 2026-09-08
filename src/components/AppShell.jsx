@@ -2,22 +2,33 @@ import { useState, useEffect, useMemo } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useLocals } from '../hooks/useLocals'
+import { useCurrentBusiness } from '../hooks/useCurrentBusiness'
 import { useTheme } from '../context/ThemeContext'
 import { useAlerts } from '../hooks/useAlerts'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, Store, ChevronDown, ChevronLeft, ChevronRight,
-  DollarSign, FileText, BarChart3, Wallet, Bell, Gift, PlusCircle,
-  Table2, ChefHat,
+  DollarSign, FileText, BarChart3, Wallet, Bell, Gift,
+  Table2, ChefHat, Moon, Sun, UserCircle2,
   Package, Truck, ShoppingCart, BookMarked, PackageOpen, UtensilsCrossed,
-  LogOut, HelpCircle, Phone, Mail, Users, RotateCcw, MapPin, Building2, Settings,
+  LogOut, Users, RotateCcw, MapPin, Building2, Settings,
 } from 'lucide-react'
 import AunaroSymbol from '@/assets/brand/AunaroSymbol'
+import { displayNameFromEmail } from '@/lib/v2SuperAdminAdapter'
+
+const ROLE_BADGE_LABEL = {
+  SUPERADMIN: 'Superadmin',
+  ADMINNEGOCIO: 'Gerente',
+  ADMIN: 'Administrador',
+  EMPLEADO: 'Empleado',
+}
+
+const PLAN_BADGE_LABEL = { enterprise: 'Enterprise', professional: 'Professional', starter: 'Standard', basic: 'Standard' }
 import { ExpandableTabs } from './ui/expandable-tabs'
 import CoachMark from './onboarding/CoachMark'
 import { useOnboarding } from '../context/OnboardingContext'
-import { isSuperAdminRole, isAdminNegocioRole } from '../auth/roleLabel'
+import { isSuperAdminRole, isAdminNegocioRole, normalizeRoleKey } from '../auth/roleLabel'
 import { WORKER_ROLES } from '../constants/roles'
 import { isDirectSaleDemoUser } from '../constants/demoMode'
 import { formatShortAddress } from '../lib/formatAddress'
@@ -26,7 +37,7 @@ import { isAlPasoLocal } from '../lib/salesModel'
 
 /* ── key sets for accordion auto-open ──────────────────────────── */
 const ADMIN_KEYS = new Set(['administracion', 'ventas', 'rendiciones', 'reportes', 'flujo-caja', 'alertas', 'bonos'])
-const POS_KEYS   = new Set(['pos', 'pos-mesas', 'pos-kitchen', 'pos-venta-directa', 'pos-registrar-producto'])
+const POS_KEYS   = new Set(['pos', 'pos-mesas', 'pos-kitchen', 'pos-venta-directa'])
 const INV_KEYS   = new Set(['inv-hub', 'inv-prov', 'inv-stock', 'inv-stock-ctrl', 'inv-compras', 'inv-recetas'])
 
 /* ── active-key derived from pathname ──────────────────────────── */
@@ -37,7 +48,6 @@ function deriveActiveKey(pathname) {
   if (pathname.includes('/inventario/compras-semanales')) return 'inv-compras'
   if (pathname.includes('/inventario/recipes'))           return 'inv-recetas'
   if (pathname.includes('/inventario'))                   return 'inv-hub'
-  if (pathname.includes('/pos/registrar-producto'))       return 'pos-registrar-producto'
   if (pathname.includes('/pos/venta-directa'))            return 'pos-venta-directa'
   if (pathname.includes('/pos/cocina'))                   return 'pos-kitchen'
   if (pathname.includes('/pos'))                          return 'pos-mesas'
@@ -103,7 +113,7 @@ const ACCORDIONS = [
 function Sidebar({ collapsed, onToggle, onClose }) {
   const { user, userRole, logout } = useAuth()
   const { restart: restartTour } = useOnboarding()
-  const { darkMode, setDarkMode } = useTheme()
+  const { business } = useCurrentBusiness()
   const isSuperAdmin = isSuperAdminRole(userRole)
   const isOwner = isAdminNegocioRole(userRole)
   const isWorker = WORKER_ROLES.includes(userRole)
@@ -124,20 +134,6 @@ function Sidebar({ collapsed, onToggle, onClose }) {
 
   const [userOpen, setUserOpen] = useState({ administracion: false, pos: false, inventario: false })
   const [userClosed, setUserClosed] = useState({ administracion: false, pos: false, inventario: false })
-  const [helpOpen, setHelpOpen] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-
-  const applyMode = (dark) => {
-    setDarkMode(dark)
-    try {
-      document.documentElement.classList.toggle('dark', dark)
-      window.localStorage.setItem('theme', dark ? 'dark' : 'light')
-    } catch {}
-  }
-
-  const resetAppearance = () => {
-    applyMode(false)
-  }
 
   const isOpen = (key) => {
     if (userClosed[key]) return false
@@ -183,7 +179,6 @@ function Sidebar({ collapsed, onToggle, onClose }) {
       case 'pos-mesas':     if (localId) navigate(`/local/${localId}/pos`, { state: navState }); break
       case 'pos-kitchen':   if (localId) navigate(`/local/${localId}/pos/cocina`, { state: navState }); break
       case 'pos-venta-directa': if (localId) navigate(`/local/${localId}/pos/venta-directa`, { state: navState }); break
-      case 'pos-registrar-producto': if (localId) navigate(`/local/${localId}/pos/registrar-producto`, { state: navState }); break
       case 'inv-hub':       if (localId) navigate(`/local/${localId}/inventario`, { state: navState }); break
       case 'inv-prov':      if (localId) navigate(`/local/${localId}/inventario/proveedores`, { state: navState }); break
       case 'inv-stock':     if (localId) navigate(`/local/${localId}/inventario/stock`, { state: navState }); break
@@ -197,13 +192,14 @@ function Sidebar({ collapsed, onToggle, onClose }) {
   }
 
   const discoverItems = [
-    ...(isOwner ? [{ key: 'locales', label: 'Tus Franquicias', icon: Store }] : []),
+    ...(isOwner ? [{ key: 'locales', label: 'Tus franquicias', icon: Store }] : []),
     ...(isSuperAdmin ? [{ key: 'gestor', label: 'Gestor de Negocios', icon: Building2 }] : []),
     ...(isSuperAdmin ? [{ key: 'gestor-resumen', label: 'Resumen Global', icon: LayoutDashboard }] : []),
     ...(isSuperAdmin ? [{ key: 'gestor-usuarios', label: 'Usuarios', icon: Users }] : []),
     ...(isSuperAdmin ? [{ key: 'gestor-auditoria', label: 'Auditoría', icon: FileText }] : []),
     ...(isSuperAdmin ? [{ key: 'gestor-observabilidad', label: 'Observabilidad', icon: BarChart3 }] : []),
     ...(isOwner ? [{ key: 'usuarios', label: 'Usuarios', icon: Users }] : []),
+    ...(isOwner && isV2FeatureEnabled('hrModule') && !localId ? [{ key: 'hr-hub', label: 'Recursos Humanos', icon: Users, disabled: true }] : []),
     ...(isV2FeatureEnabled('hrModule') && localId ? [{ key: 'hr-hub', label: 'RRHH', icon: Users }] : []),
     ...(!isWorker && localId ? [{ key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }] : []),
   ]
@@ -212,7 +208,6 @@ function Sidebar({ collapsed, onToggle, onClose }) {
   // caja + menú, sin mesas/cocina.
   const AL_PASO_POS_ITEMS = [
     { key: 'pos-venta-directa', label: 'Venta directa', icon: DollarSign },
-    { key: 'pos-registrar-producto', label: 'Registrar productos', icon: PlusCircle },
   ]
   const WORKER_FINANCE_ITEM_KEYS = new Set(['ventas', 'rendiciones'])
   const visibleAccordions = isWorker
@@ -236,7 +231,7 @@ function Sidebar({ collapsed, onToggle, onClose }) {
         })
       : ACCORDIONS
 
-  const navBtn = (item, small = false) => {
+  const navBtn = (item, small = false, hideIcon = false) => {
     const isActive = activeKey === item.key
     const Icon = item.icon
     const isDisabled = item.disabled === true
@@ -249,16 +244,16 @@ function Sidebar({ collapsed, onToggle, onClose }) {
         disabled={isDisabled}
         className={cn(
           'w-full flex items-center gap-2.5 px-3 rounded-lg font-medium transition-colors text-left',
-          small ? 'py-1.5 text-sm' : 'py-2 text-sm',
+          small ? 'py-1.5 text-sm' : 'py-2.5 text-sm',
           isDisabled
             ? 'text-[hsl(var(--muted-foreground))] cursor-not-allowed opacity-50'
             : isActive
-              ? 'bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))]'
+              ? 'bg-[hsl(var(--accent))] text-[hsl(var(--foreground))]'
               : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--foreground))]',
           collapsed && 'justify-center px-0',
         )}
       >
-        <Icon size={small ? 14 : 16} className="shrink-0" />
+        {(!hideIcon || collapsed) && <Icon size={small ? 14 : 16} className="shrink-0" />}
         <AnimatePresence>
           {!collapsed && (
             <motion.span
@@ -276,12 +271,12 @@ function Sidebar({ collapsed, onToggle, onClose }) {
 
   return (
     <motion.aside
-      animate={{ width: collapsed ? 64 : 240 }}
+      animate={{ width: collapsed ? 90 : 240 }}
       transition={{ type: 'spring', stiffness: 320, damping: 30 }}
       className="shrink-0 flex flex-col bg-[hsl(var(--card))] border-r border-[hsl(var(--border))] h-screen sticky top-0 overflow-hidden z-20"
     >
       {/* Header */}
-      <div className={cn('border-b border-[hsl(var(--border))] flex items-center', collapsed ? 'flex-col justify-center gap-1.5 px-2 py-2.5' : 'justify-between px-3 min-h-[56px]')}>
+      <div className={cn('border-b border-[hsl(var(--border))] flex items-center', collapsed ? 'justify-center gap-1.5 px-1 py-2.5 translate-x-2.5' : 'justify-between px-3 min-h-[56px]')}>
         {collapsed ? (
           <AunaroSymbol size={20} className="shrink-0" />
         ) : (
@@ -299,24 +294,79 @@ function Sidebar({ collapsed, onToggle, onClose }) {
         </button>
       </div>
 
+      {/* Perfil: badges de rol/plan + avatar */}
+      {!collapsed && (
+        <div className="px-3 pt-4 pb-3 flex flex-col items-center text-center">
+          <div className="flex items-center gap-1.5 mb-3">
+            {userRole && (
+              <span className="text-[11px] font-semibold rounded-full px-2.5 py-0.5 bg-indigo-500/80 text-white">
+                {ROLE_BADGE_LABEL[normalizeRoleKey(userRole)] || userRole}
+              </span>
+            )}
+            {business?.plan && (
+              <span className="text-[11px] font-semibold rounded-full px-2.5 py-0.5 bg-emerald-500 text-white">
+                {PLAN_BADGE_LABEL[business.plan] || business.plan}
+              </span>
+            )}
+          </div>
+          <div className="h-16 w-16 rounded-full overflow-hidden flex items-center justify-center mb-2.5 shrink-0" style={{ backgroundColor: '#fff' }}>
+            {user?.avatar_url ? (
+              <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <UserCircle2 className="h-11 w-11 text-slate-700" strokeWidth={1.5} />
+            )}
+          </div>
+          <p className="font-marca text-base text-[hsl(var(--foreground))] truncate max-w-full">
+            {displayNameFromEmail(user?.email)}
+          </p>
+        </div>
+      )}
+
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-3 px-2 no-scrollbar">
         {/* DESCUBRIR */}
-        {discoverItems.length > 0 && (
-          <div className="mb-3">
-            <AnimatePresence>
-              {!collapsed && (
-                <motion.p
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="px-3 pb-1 text-[10px] font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-widest"
-                >
-                  DESCUBRIR
-                </motion.p>
+        <div className="mb-3">
+          {discoverItems.length > 0 && (
+            <>
+              <AnimatePresence>
+                {!collapsed && (
+                  <motion.p
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="px-3 pb-1.5 text-xs text-[hsl(var(--muted-foreground))]"
+                  >
+                    Descubrir
+                  </motion.p>
+                )}
+              </AnimatePresence>
+            </>
+          )}
+
+          <div className={cn('rounded-xl border border-[hsl(var(--border))] flex flex-col gap-0.5', collapsed ? 'p-1' : 'p-1.5')}>
+            {discoverItems.map((item) => navBtn(item, false, true))}
+
+            {/* Configuración */}
+            <button
+              onClick={() => { onClose?.(); navigate('/configuracion') }}
+              title={collapsed ? 'Configuración' : undefined}
+              className={cn(
+                'w-full flex items-center gap-2.5 px-3 rounded-lg font-medium transition-colors text-left py-2.5 text-sm',
+                pathname === '/configuracion'
+                  ? 'bg-[hsl(var(--accent))] text-[hsl(var(--foreground))]'
+                  : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--foreground))]',
+                collapsed ? 'justify-center px-0' : null,
               )}
-            </AnimatePresence>
-            {discoverItems.map((item) => navBtn(item))}
+            >
+              {collapsed && <Settings size={16} className="shrink-0" />}
+              <AnimatePresence>
+                {!collapsed && (
+                  <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 text-left">
+                    Configuración
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </button>
           </div>
-        )}
+        </div>
 
         {/* Accordions: menú + submenú expansible */}
         {localId && visibleAccordions.map((section) => {
@@ -396,156 +446,15 @@ function Sidebar({ collapsed, onToggle, onClose }) {
 
       {/* Footer */}
       <div className="px-2 pb-4 border-t border-[hsl(var(--border))] pt-3">
-        {/* Ajustes */}
-        <button
-          onClick={() => { if (collapsed) { onToggle(); setSettingsOpen(true) } else setSettingsOpen((v) => !v) }}
-          title={collapsed ? 'Ajustes' : undefined}
-          className={cn(
-            'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors mb-1 cursor-pointer',
-            settingsOpen
-              ? 'bg-[hsl(var(--accent))] text-[hsl(var(--foreground))]'
-              : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--foreground))]',
-            collapsed && 'justify-center px-0',
-          )}
-        >
-          <Settings size={16} className="shrink-0" />
-          <AnimatePresence>
-            {!collapsed && (
-              <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 text-left">
-                Ajustes
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </button>
-
-        {/* Panel ajustes */}
-        <AnimatePresence>
-          {settingsOpen && !collapsed && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-              className="overflow-hidden mb-2"
-            >
-              <div className="rounded-lg bg-[hsl(var(--muted))] px-3 py-3 space-y-2">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">Apariencia</span>
-
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">Modo</span>
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => applyMode(false)}
-                      aria-pressed={!darkMode}
-                      className={cn(
-                        'px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer',
-                        !darkMode
-                          ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]'
-                          : 'bg-[hsl(var(--card))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]',
-                      )}
-                    >
-                      Claro
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyMode(true)}
-                      aria-pressed={darkMode}
-                      className={cn(
-                        'px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer',
-                        darkMode
-                          ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]'
-                          : 'bg-[hsl(var(--card))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]',
-                      )}
-                    >
-                      Oscuro
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={resetAppearance}
-                  className="w-full text-left text-[10px] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
-                >
-                  Restablecer apariencia (claro)
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Ayuda / Soporte */}
-        <button
-          onClick={() => { if (collapsed) { onToggle(); setHelpOpen(true) } else setHelpOpen((v) => !v) }}
-          title={collapsed ? 'Ayuda' : undefined}
-          className={cn(
-            'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors mb-1',
-            helpOpen
-              ? 'bg-[hsl(var(--accent))] text-[hsl(var(--foreground))]'
-              : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--foreground))]',
-            collapsed && 'justify-center px-0',
-          )}
-        >
-          <HelpCircle size={16} className="shrink-0" />
-          <AnimatePresence>
-            {!collapsed && (
-              <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 text-left">
-                Ayuda
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </button>
-
-        {/* Panel soporte */}
-        <AnimatePresence>
-          {helpOpen && !collapsed && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-              className="overflow-hidden mb-2"
-            >
-              <div className="rounded-lg bg-[hsl(var(--muted))] px-3 py-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">Soporte</span>
-                  <span className="text-[9px] font-bold bg-amber-400/90 text-amber-900 px-1.5 py-0.5 rounded-full tracking-wide">DEMO</span>
-                </div>
-                <div className="flex items-center gap-2 text-[hsl(var(--foreground))]">
-                  <Phone size={12} className="shrink-0 text-[hsl(var(--muted-foreground))]" />
-                  <span className="text-xs">+56 9 1234 5678</span>
-                </div>
-                <div className="flex items-center gap-2 text-[hsl(var(--foreground))]">
-                  <Mail size={12} className="shrink-0 text-[hsl(var(--muted-foreground))]" />
-                  <span className="text-xs truncate">gestflowtriferax@gmail.com</span>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <AnimatePresence>
-          {!collapsed && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="px-3 py-2 mb-2 rounded-lg bg-[hsl(var(--muted))]"
-            >
-              <p className="text-xs font-medium text-[hsl(var(--foreground))] truncate">{user?.email}</p>
-              <p className="text-[10px] text-[hsl(var(--muted-foreground))] mt-0.5">{userRole || 'Usuario'}</p>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         <button
           onClick={logout}
           title={collapsed ? 'Cerrar sesión' : undefined}
           className={cn(
-            'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--destructive)/0.1)] hover:text-[hsl(var(--destructive))] transition-colors',
-            collapsed && 'justify-center px-0',
+            'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-semibold bg-[hsl(var(--destructive))] text-[hsl(var(--destructive-foreground))] hover:opacity-90 transition-opacity',
+            collapsed ? 'justify-center px-0' : 'justify-center',
           )}
         >
-          <LogOut size={16} className="shrink-0" />
+          {collapsed && <LogOut size={16} className="shrink-0" />}
           <AnimatePresence>
             {!collapsed && (
               <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -554,6 +463,18 @@ function Sidebar({ collapsed, onToggle, onClose }) {
             )}
           </AnimatePresence>
         </button>
+
+        {/* Wordmark de marca */}
+        {!collapsed && (
+          <div className="mt-4 flex flex-col items-center text-center gap-1">
+            <AunaroSymbol size={28} />
+            <span className="font-marca text-sm tracking-widest text-[hsl(var(--foreground))]">AUNARO</span>
+            <p className="text-[10px] italic text-[hsl(var(--muted-foreground))]">Inteligencia de negocios en tus manos</p>
+            <p className="text-[9px] text-[hsl(var(--muted-foreground))] mt-1">
+              © {new Date().getFullYear()} Mardev. Todos los derechos reservados.
+            </p>
+          </div>
+        )}
       </div>
     </motion.aside>
   )
@@ -563,10 +484,21 @@ function Sidebar({ collapsed, onToggle, onClose }) {
 function TopBar({ localId }) {
   const { userRole } = useAuth()
   const { locales } = useLocals()
+  const { business } = useCurrentBusiness()
+  const { darkMode, setDarkMode } = useTheme()
   const { state: locState } = useLocation()
   const navigate = useNavigate()
   const isWorkerRole = WORKER_ROLES.includes(userRole)
   const { pendingCount } = useAlerts(localId)
+
+  const toggleDarkMode = () => {
+    const next = !darkMode
+    setDarkMode(next)
+    try {
+      document.documentElement.classList.toggle('dark', next)
+      window.localStorage.setItem('theme', next ? 'dark' : 'light')
+    } catch {}
+  }
 
   const selectedLocal = useMemo(() => {
     if (!localId) return null
@@ -607,22 +539,33 @@ function TopBar({ localId }) {
               </p>
             )}
           </>
+        ) : business?.name ? (
+          <h1 className="font-marca text-lg text-[hsl(var(--foreground))] truncate">{business.name}</h1>
         ) : (
           <span className="font-marca text-sm tracking-[0.1em] text-[hsl(var(--foreground))]">AUNARO</span>
         )}
       </div>
 
-      {/* Right: expandable tab controls */}
-      {tabs.length > 0 && (
-        <div className="shrink-0">
+      {/* Right: dark mode toggle + expandable tab controls */}
+      <div className="shrink-0 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={toggleDarkMode}
+          aria-label={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          title={darkMode ? 'Modo claro' : 'Modo oscuro'}
+          className="w-9 h-9 flex items-center justify-center rounded-full text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--foreground))] transition-colors"
+        >
+          {darkMode ? <Moon size={17} /> : <Sun size={17} />}
+        </button>
+        {tabs.length > 0 && (
           <ExpandableTabs
             tabs={tabs}
             activeColor="text-[hsl(var(--primary))]"
             onChange={handleTabChange}
             className="border-[hsl(var(--border))] bg-[hsl(var(--card))]"
           />
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

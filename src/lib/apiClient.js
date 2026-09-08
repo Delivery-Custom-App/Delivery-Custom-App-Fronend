@@ -258,6 +258,25 @@ export async function deleteUser() {
   throw new Error('Eliminar usuarios aún no está disponible en Backend V2')
 }
 
+export async function getBusiness(businessId) {
+  if (!businessId) return null
+  return apiRequest(`/businesses/${businessId}`)
+}
+
+export async function changeMyPassword({ current_password, new_password }) {
+  return apiRequest('/auth/change-password', {
+    method: 'POST',
+    body: { current_password, new_password },
+  })
+}
+
+export async function updateMyAvatar(avatar_url) {
+  return apiRequest('/auth/me', {
+    method: 'PATCH',
+    body: { avatar_url },
+  })
+}
+
 // ─── Printers (OP-02) ─────────────────────────────────────────────────────────
 
 export async function listPrinters(localId) {

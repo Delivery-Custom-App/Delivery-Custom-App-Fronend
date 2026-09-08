@@ -9,6 +9,12 @@ export const SALES_MODEL_LABEL = {
   AL_PASO: 'Comida al paso (caja + menú)',
 }
 
+/** Etiqueta corta para columnas de tabla (ej. "Tipo de local" en Tus Franquicias). */
+export const SALES_MODEL_SHORT_LABEL = {
+  RESTAURANT: 'Restaurante',
+  AL_PASO: 'Al paso',
+}
+
 export function normalizeSalesModel(value) {
   const raw = String(value || '').trim().toUpperCase()
   if (raw === SALES_MODEL.RESTAURANT || raw === 'RESTAURANTE') return SALES_MODEL.RESTAURANT

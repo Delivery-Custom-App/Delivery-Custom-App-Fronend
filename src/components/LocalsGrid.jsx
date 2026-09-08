@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Building2, MapPin, Plus, TrendingUp, TrendingDown, Settings, Search, ArrowUp, ArrowDown, Minus, ChevronRight, ChevronDown, HelpCircle, X, RefreshCw } from 'lucide-react'
+import { Building2, MapPin, Plus, TrendingUp, TrendingDown, Settings, Search, ArrowUp, ChevronRight, ChevronDown, HelpCircle, X, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import OpcionesDrawer from './OpcionesDrawer'
 import FranchisesMap from './FranchisesMap'
+import FranchiseSalesCharts from './FranchiseSalesCharts'
+import { SALES_MODEL_SHORT_LABEL } from '@/lib/salesModel'
 
 const THRESHOLDS_KEY = 'gestflow_flow_thresholds'
 const DEFAULT_THRESHOLDS = { medium: 20, high: 50, salesDays: 7 }
@@ -43,31 +45,11 @@ function getFlowTrend(currentCount, delta, thresholds) {
   return TIER_ORDER[currFlow.label] > TIER_ORDER[prevFlow.label] ? 'up' : 'down'
 }
 
-function DeltaBadge({ delta }) {
-  if (!delta || (delta.current === 0 && delta.prev === 0)) return <span className="text-xs text-[hsl(var(--muted-foreground))]">—</span>
-  const d = delta.delta
-  if (d > 0) return (
-    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700">
-      <ArrowUp className="h-3 w-3" />+{d}
-    </span>
-  )
-  if (d < 0) return (
-    <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-700">
-      <ArrowDown className="h-3 w-3" />{d}
-    </span>
-  )
-  return (
-    <span className="inline-flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))]">
-      <Minus className="h-3 w-3" />Estable
-    </span>
-  )
-}
 
 function LocalsGrid({ locales, onLocalSelect, onCreateLocal, salesCounts = {}, deltaCounts = {}, isSuperAdmin = false, onRefresh }) {
   const [thresholds,   setThresholds]   = useState(loadThresholds)
   const [showOpciones, setShowOpciones] = useState(false)
   const [search,       setSearch]       = useState('')
-  const [filterZona,   setFilterZona]   = useState('')
   const [filterFlow,   setFilterFlow]   = useState('')
   const [guideOpen,    setGuideOpen]    = useState(false)
   const [mapOpen,      setMapOpen]      = useState(true)
@@ -78,27 +60,18 @@ function LocalsGrid({ locales, onLocalSelect, onCreateLocal, salesCounts = {}, d
     onRefresh?.()
   }
 
-  const zonas = useMemo(() => {
-    const set = new Set(locales.map((l) => l.category || '').filter(Boolean))
-    return [...set].sort((a, b) => a.localeCompare(b))
-  }, [locales])
-
   const rows = useMemo(() => {
     return locales.filter((l) => {
       if (search && !l.name.toLowerCase().includes(search.toLowerCase())) return false
-      if (filterZona) {
-        const zona = l.category || ''
-        if (filterZona === '__sin__' ? zona !== '' : zona !== filterZona) return false
-      }
       if (filterFlow) {
         const flow = getSalesFlow(salesCounts[l.id], thresholds)
         if (!flow || flow.label !== filterFlow) return false
       }
       return true
     }).sort((a, b) => a.name.localeCompare(b.name))
-  }, [locales, search, filterZona, filterFlow, salesCounts, thresholds])
+  }, [locales, search, filterFlow, salesCounts, thresholds])
 
-  const activeFilters = search || filterZona || filterFlow
+  const activeFilters = search || filterFlow
 
   return (
     <>
@@ -153,12 +126,6 @@ function LocalsGrid({ locales, onLocalSelect, onCreateLocal, salesCounts = {}, d
                     desc: 'Compara la actividad de la última hora con la hora anterior. Flecha verde ↑ = aumentó de nivel, flecha roja ↓ = bajó de nivel. Si no cambia de nivel, no aparece flecha.',
                   },
                   {
-                    icon: Minus,
-                    color: 'text-blue-600',
-                    title: 'Variación (Δ)',
-                    desc: 'Diferencia exacta de pedidos entre la última hora y la hora anterior. Un +3 significa 3 pedidos más que en la hora previa.',
-                  },
-                  {
                     icon: Settings,
                     color: 'text-slate-600',
                     title: 'Botón Opciones',
@@ -181,7 +148,7 @@ function LocalsGrid({ locales, onLocalSelect, onCreateLocal, salesCounts = {}, d
                     icon: Search,
                     color: 'text-indigo-600',
                     title: 'Filtros y búsqueda',
-                    desc: 'Busca por nombre, filtra por zona geográfica o por nivel de flujo para encontrar franquicias rápidamente.',
+                    desc: 'Busca por nombre o filtra por nivel de flujo para encontrar franquicias rápidamente.',
                   },
                 ].map(({ icon: Icon, color, title, desc, highlight }) => (
                   <div
@@ -220,8 +187,8 @@ function LocalsGrid({ locales, onLocalSelect, onCreateLocal, salesCounts = {}, d
                 <Building2 className="h-3.5 w-3.5" />
                 AUNARO
               </div>
-              <h1 className="text-3xl font-black text-[hsl(var(--foreground))] tracking-tight">
-                Tus Franquicias
+              <h1 className="font-marca text-3xl text-[hsl(var(--foreground))] tracking-tight">
+                Tus franquicias
               </h1>
               <p className="mt-1.5 text-sm text-[hsl(var(--muted-foreground))] max-w-md">
                 {locales.length > 0
@@ -252,6 +219,7 @@ function LocalsGrid({ locales, onLocalSelect, onCreateLocal, salesCounts = {}, d
         </div>
 
         <div className="px-6 pb-6 flex flex-col gap-4">
+          {locales.length > 0 && <FranchiseSalesCharts locales={locales} />}
           {locales.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[hsl(var(--border))] bg-[hsl(var(--card))] py-24 text-center">
               <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-[hsl(var(--primary)/0.08)]">
@@ -274,23 +242,12 @@ function LocalsGrid({ locales, onLocalSelect, onCreateLocal, salesCounts = {}, d
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[hsl(var(--muted-foreground))]" />
                   <input
                     type="text"
-                    placeholder="Buscar franquicia…"
+                    placeholder="Buscar local…"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     className="w-full pl-8 pr-3 py-1.5 text-sm rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/0.3)] focus:border-[hsl(var(--primary))]"
                   />
                 </div>
-                {zonas.length > 0 && (
-                  <select
-                    value={filterZona}
-                    onChange={(e) => setFilterZona(e.target.value)}
-                    className="py-1.5 px-2.5 text-sm rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/0.3)]"
-                  >
-                    <option value="">Todas las zonas</option>
-                    {zonas.map((z) => <option key={z} value={z}>{z}</option>)}
-                    <option value="__sin__">Sin zona</option>
-                  </select>
-                )}
                 <select
                   value={filterFlow}
                   onChange={(e) => setFilterFlow(e.target.value)}
@@ -304,7 +261,7 @@ function LocalsGrid({ locales, onLocalSelect, onCreateLocal, salesCounts = {}, d
                 {activeFilters && (
                   <button
                     type="button"
-                    onClick={() => { setSearch(''); setFilterZona(''); setFilterFlow('') }}
+                    onClick={() => { setSearch(''); setFilterFlow('') }}
                     className="text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] underline"
                   >
                     Limpiar filtros
@@ -322,7 +279,7 @@ function LocalsGrid({ locales, onLocalSelect, onCreateLocal, salesCounts = {}, d
                   <p className="text-sm">Sin resultados para los filtros actuales.</p>
                   <button
                     type="button"
-                    onClick={() => { setSearch(''); setFilterZona(''); setFilterFlow('') }}
+                    onClick={() => { setSearch(''); setFilterFlow('') }}
                     className="mt-2 text-xs text-[hsl(var(--primary))] underline"
                   >
                     Limpiar filtros
@@ -333,12 +290,10 @@ function LocalsGrid({ locales, onLocalSelect, onCreateLocal, salesCounts = {}, d
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-[hsl(var(--muted)/0.4)] hover:bg-[hsl(var(--muted)/0.4)]">
-                        <TableHead className="pl-5 py-3 text-xs font-semibold uppercase tracking-wide">Franquicia</TableHead>
-                        <TableHead className="py-3 text-xs font-semibold uppercase tracking-wide">Zona</TableHead>
+                        <TableHead className="pl-5 py-3 text-xs font-semibold uppercase tracking-wide">Nombre local</TableHead>
                         <TableHead className="py-3 text-xs font-semibold uppercase tracking-wide">Dirección</TableHead>
-                        <TableHead className="text-center py-3 text-xs font-semibold uppercase tracking-wide">Flujo</TableHead>
-                        <TableHead className="text-right py-3 text-xs font-semibold uppercase tracking-wide">Ventas</TableHead>
-                        <TableHead className="text-right py-3 text-xs font-semibold uppercase tracking-wide">Δ 1h</TableHead>
+                        <TableHead className="py-3 text-xs font-semibold uppercase tracking-wide">Tipo de local</TableHead>
+                        <TableHead className="text-center py-3 text-xs font-semibold uppercase tracking-wide">Flujo de venta</TableHead>
                         <TableHead className="pr-5 py-3 w-10" />
                       </TableRow>
                     </TableHeader>
@@ -362,11 +317,6 @@ function LocalsGrid({ locales, onLocalSelect, onCreateLocal, salesCounts = {}, d
                                 <span className="font-semibold text-sm text-[hsl(var(--foreground))]">{local.name}</span>
                               </div>
                             </TableCell>
-                            <TableCell className="py-3.5">
-                              <span className="text-sm text-[hsl(var(--muted-foreground))]">
-                                {local.category || <span className="italic opacity-50">Sin zona</span>}
-                              </span>
-                            </TableCell>
                             <TableCell className="py-3.5 max-w-[200px]">
                               {local.address ? (
                                 <div className="flex items-center gap-1 text-sm text-[hsl(var(--muted-foreground))] min-w-0">
@@ -376,6 +326,11 @@ function LocalsGrid({ locales, onLocalSelect, onCreateLocal, salesCounts = {}, d
                               ) : (
                                 <span className="text-sm text-[hsl(var(--muted-foreground))] italic opacity-50">—</span>
                               )}
+                            </TableCell>
+                            <TableCell className="py-3.5">
+                              <span className="text-sm text-[hsl(var(--muted-foreground))]">
+                                {SALES_MODEL_SHORT_LABEL[local.sales_model] || <span className="italic opacity-50">—</span>}
+                              </span>
                             </TableCell>
                             <TableCell className="py-3.5 text-center">
                               {flow ? (
@@ -391,19 +346,6 @@ function LocalsGrid({ locales, onLocalSelect, onCreateLocal, salesCounts = {}, d
                               ) : (
                                 <span className="text-xs text-[hsl(var(--muted-foreground))]">—</span>
                               )}
-                            </TableCell>
-                            <TableCell className="py-3.5 text-right tabular-nums">
-                              {salesCounts[local.id] != null ? (
-                                <span className="inline-flex items-center gap-1 text-sm font-semibold text-[hsl(var(--foreground))]">
-                                  <TrendingUp className="h-3.5 w-3.5 text-[hsl(var(--primary))] shrink-0" />
-                                  {salesCounts[local.id]}
-                                </span>
-                              ) : (
-                                <span className="text-xs text-[hsl(var(--muted-foreground))]">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="py-3.5 text-right">
-                              <DeltaBadge delta={delta} />
                             </TableCell>
                             <TableCell className="pr-5 py-3.5 text-right">
                               <ChevronRight className="h-4 w-4 text-[hsl(var(--muted-foreground))] inline-block" />

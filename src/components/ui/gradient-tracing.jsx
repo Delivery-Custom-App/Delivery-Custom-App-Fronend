@@ -1,5 +1,3 @@
-import { motion } from 'framer-motion'
-
 export function GradientTracing({
   width,
   height,
@@ -17,16 +15,26 @@ export function GradientTracing({
         <path d={path} style={{ stroke: baseColor }} strokeOpacity="0.2" strokeWidth={strokeWidth} />
         <path d={path} stroke={`url(#${gradientId})`} strokeLinecap="round" strokeWidth={strokeWidth} />
         <defs>
-          <motion.linearGradient
-            animate={{ x1: [0, width * 2], x2: [0, width] }}
-            transition={{ duration: animationDuration, repeat: Infinity, ease: 'linear' }}
-            id={gradientId}
-            gradientUnits="userSpaceOnUse"
-          >
+          {/* Animación SVG nativa (SMIL) en vez de framer-motion: motion.linearGradient
+              no soporta x1/x2 como propiedades SVG reconocidas y termina pasando
+              "undefined" al DOM, generando errores de consola en cada frame. */}
+          <linearGradient id={gradientId} gradientUnits="userSpaceOnUse">
             <stop style={{ stopColor: gradientColors[0] }} stopOpacity="0" />
             <stop style={{ stopColor: gradientColors[1] }} />
             <stop offset="1" style={{ stopColor: gradientColors[2] }} stopOpacity="0" />
-          </motion.linearGradient>
+            <animate
+              attributeName="x1"
+              values={`0;${width * 2}`}
+              dur={`${animationDuration}s`}
+              repeatCount="indefinite"
+            />
+            <animate
+              attributeName="x2"
+              values={`0;${width}`}
+              dur={`${animationDuration}s`}
+              repeatCount="indefinite"
+            />
+          </linearGradient>
         </defs>
       </svg>
     </div>
