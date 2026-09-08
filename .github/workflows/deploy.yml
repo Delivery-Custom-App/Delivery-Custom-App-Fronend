@@ -1,22 +1,110 @@
-name: Deploy Frontend
+name: CI/CD
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    
+
     steps:
-      - name: Deploy to Server
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # No bloqueante: hay deuda de lint preexistente no relacionada con
+      # este pipeline (mismo criterio que ruff en el backend).
+      - name: Lint (eslint)
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Run tests
+        run: npx vitest run
+
+      - name: Build
+        run: npm run build
+
+  deploy:
+    name: Deploy to production
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: gestflow-frontend-deploy
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # El server solo es alcanzable dentro de la tailnet de GestFlow.
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+
+      - name: Set up deploy SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      # Fuerza el establecimiento de la ruta en la tailnet antes de usar SSH
+      # — justo después de "tailscale up" la ruta puede no estar lista aún.
+      - name: Wait for tailnet route
         run: |
-          echo "Deploy workflow configured"
-          echo "To deploy your app, run from your server:"
-          echo "cd /home/alumno/Delivery-Custom-App-INGSW2-FRONTEND"
-          echo "git pull origin main"
-          echo "docker compose up -d --build"
+          for i in 1 2 3 4 5; do
+            tailscale ping -c 1 100.89.15.17 && break
+            sleep 3
+          done || true
+
+      - name: Trust host key
+        run: |
+          mkdir -p ~/.ssh
+          for i in 1 2 3 4 5 6; do
+            if ssh-keyscan -T 10 -H 100.89.15.17 >> ~/.ssh/known_hosts 2>/tmp/keyscan.err && [ -s ~/.ssh/known_hosts ]; then
+              echo "ssh-keyscan ok (intento $i)"
+              exit 0
+            fi
+            echo "ssh-keyscan intento $i falló, reintentando en 5s"; cat /tmp/keyscan.err
+            sleep 5
+          done
+          echo "ssh-keyscan agotó los reintentos"; exit 1
+
+      - name: Backup remoto
+        run: |
+          STAMP=$(date +%Y%m%d_%H%M%S)
+          ssh root@100.89.15.17 "
+            mkdir -p /var/www/backups/$STAMP &&
+            tar -C /var/www -czf /var/www/backups/$STAMP/delivery-frontend.tgz delivery-frontend
+          "
+
+      # --delete: los assets de Vite van hasheados por contenido — sin esto,
+      # los chunks de builds viejos se acumularían para siempre en el server.
+      - name: Sync frontend build (dist/)
+        run: |
+          rsync -az --delete \
+            dist/ root@100.89.15.17:/var/www/delivery-frontend/
+
+      - name: Health check
+        run: |
+          curl -sf -o /dev/null -w "site:%{http_code}\n" "https://gestflow.mardev.cl"

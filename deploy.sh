@@ -1,21 +1,26 @@
 #!/bin/bash
 
-# Deploy script for Delivery-Custom-App-INGSW2-FRONTEND
+# Deploy manual de emergencia para Delivery-Custom-App-INGSW2-FRONTEND.
+# El deploy normal es automático vía .github/workflows/deploy.yml (push a
+# main). Usar este script solo si el CI está caído — corre localmente
+# (no en el server, no hay docker compose ni git ahí; el server solo
+# recibe el build vía rsync).
 
 set -e
 
-echo "🚀 Starting deployment..."
-echo "📝 Pulling latest changes from GitHub..."
+SERVER="root@100.89.15.17"
+REMOTE_DIR="/var/www/delivery-frontend"
 
-git pull origin main
+echo "🚀 Build local..."
+npm ci
+npm run build
 
-echo "📦 Rebuilding and deploying with Docker Compose..."
+echo "📦 Backup remoto..."
+STAMP=$(date +%Y%m%d_%H%M%S)
+ssh "$SERVER" "mkdir -p /var/www/backups/$STAMP && tar -C /var/www -czf /var/www/backups/$STAMP/delivery-frontend.tgz delivery-frontend"
 
-docker compose down
-docker compose up -d --build
+echo "📤 Sincronizando dist/ al server..."
+rsync -az --delete dist/ "$SERVER:$REMOTE_DIR/"
 
-echo "✅ Deployment complete!"
-echo "🌐 Frontend is available at http://localhost:8080"
-echo ""
-echo "📊 Container status:"
-docker compose ps
+echo "✅ Deploy completo!"
+curl -sf -o /dev/null -w "site:%{http_code}\n" "https://gestflow.mardev.cl"
