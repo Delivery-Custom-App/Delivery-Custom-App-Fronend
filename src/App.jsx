@@ -1,11 +1,12 @@
 import { AnimatePresence } from 'framer-motion'
+import { Toaster } from 'sonner'
 import LoadingPage from './components/LoadingPage'
 import LoginPage from './components/LoginPage'
 import AuthenticatedApp from './routes/AuthenticatedRoutes'
 import NetworkErrorModal from './components/NetworkErrorModal'
 import MercadoPagoReturn from './components/MercadoPagoReturn'
 import { AppAuthProvider, useAuth } from './context/AuthContext'
-import { ThemeProvider } from './context/ThemeContext'
+import { ThemeProvider, useTheme } from './context/ThemeContext'
 
 function AppContent() {
   const { appLoading, user } = useAuth()
@@ -23,6 +24,11 @@ function AppContent() {
   )
 }
 
+function AppToaster() {
+  const { darkMode } = useTheme()
+  return <Toaster theme={darkMode ? 'dark' : 'light'} position="top-right" richColors closeButton />
+}
+
 function App() {
   return (
     <ThemeProvider>
@@ -30,6 +36,7 @@ function App() {
         <AppContent />
         <NetworkErrorModal />
         <MercadoPagoReturn />
+        <AppToaster />
       </AppAuthProvider>
     </ThemeProvider>
   )
